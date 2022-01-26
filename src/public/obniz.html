@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <script src="https://obniz.com/js/jquery-3.2.1.min.js"></script>
+    <script src="https://unpkg.com/obniz/obniz.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.3/socket.io.js"></script>
+
+    <title>Static Template</title>
+  </head>
+  <style>
+    body {
+      text-align: center;
+      background: #c1e4e9;
+    }
+    h1 {
+      background: #eaf4fc;
+    }
+  </style>
+  <body>
+    <div id="obniz-debug"></div>
+    <div>
+      <div>あなたのID: <span id="myid"></span></div>
+      <div>
+        ルームID: <input id="room" type="text" size="10" value="room001" />
+      </div>
+      <button id="connect">ルームに入る</button>
+      <div>受信した情報はコンソールログで確認してください</div>
+    </div>
+    <h1></h1>
+    <script>
+      let socket = io.connect();
+      let myid;
+
+      let room = document.querySelector("#room").value;
+      let btn = document.querySelector("#connect");
+      let b = 0;
+      let g = 0;
+
+      btn.addEventListener("click", function () {
+        socket.emit("join", room);
+        btn.remove();
+      });
+
+      socket.on("mylogin", function (data) {
+        myid = data;
+        document.querySelector("#myid").innerHTML = myid;
+        console.log("あなたのID: ", myid);
+      });
+
+      socket.on("sensor", function (data) {
+        g = parseFloat(data.g);
+        b = parseFloat(data.b);
+        console.log(g);
+      });
+
+      const obniz = new Obniz("XXXX-XXXX");
+      const LED_length = 15;
+      let leds;
+
+      let handpose;
+      let video;
+      let predictions = [];
+      let targetX,
+        targetY = 0;
+      let yubiX, yubiY;
+      let edge = 50;
+      let a = 20;
+      let speed = 0.05;
+      let cat;
+
+      obniz.onconnect = async function () {
+        leds = obniz.wired("WS2812", { din: 26 });
+      };
+
+      function preload() {
+        cat = loadImage("img/kuroneko.png");
+      }
+
+      function ledon(color) {
+        let ledlist = [];
+        for (let i = 0; i < LED_length; i++) {
+          ledlist.push(color);
+        }
+        leds.rgbs(ledlist);
+      }
+
+      function setup() {
+        createCanvas(640, 480);
+        targetX = 320;
+        targetY = 240;
+        video = createCapture(VIDEO);
+        video.size(width, height);
+
+        handpose = ml5.handpose(video, modelReady);
+
+        handpose.on("predict", (results) => {
+          predictions = results;
+        });
+
+        video.hide();
+        textAlign(CENTER);
+        textSize(11);
+      }
+
+      function modelReady() {
+        console.log("Model ready!");
+      }
+
+      function draw() {
+        image(video, 0, 0, width, height);
+        target();
+
+        // We can call both functions to draw all keypoints and the skeletons
+        drawKeypoints();
+      }
+
+      // A function to draw ellipses over the detected keypoints
+      function drawKeypoints() {
+        for (let i = 0; i < predictions.length; i += 1) {
+          const prediction = predictions[i];
+          for (let j = 0; j < prediction.landmarks.length; j += 1) {
+            const keypoint = prediction.landmarks[j];
+            fill(0, 255, 0);
+            if (j == 8) {
+              yubiX = keypoint[0];
+              yubiY = keypoint[1];
+            }
+          }
+        }
+      }
+
+      function target() {
+        targetX = targetX + speed * g;
+        targetY = targetY + speed * b;
+        //ターゲットと指の距離判定
+        let distance = Math.sqrt(
+          (yubiX - targetX) * (yubiX - targetX) +
+            (yubiY - targetY) * (yubiY - targetY)
+        );
+
+        if (distance < a) {
+          ledon([0x00, 0x00, 0x66]);
+        } else if (distance > a) {
+          ledon([0x00, 0x66, 0x00]);
+        }
+
+        fill(0, 0, 255);
+        image(cat, targetX, targetY, edge, edge);
+      }
+    </script>
+  </body>
+</html>
